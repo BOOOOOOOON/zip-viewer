@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZIP画像ビューワ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #020617; --panel: #0f172a; --panel2: #1e293b; --border: #1e293b;
+    --border2: #334155; --text: #f1f5f9; --muted: #94a3b8; --accent: #6366f1;
+    --accent2: #818cf8; --danger: #f87171;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: rgba(15,23,42,.6); }
+  ::-webkit-scrollbar-thumb { background: rgba(51,65,85,.9); border-radius: 4px; }
+
+  header {
+    background: rgba(15,23,42,.92); border-bottom: 1px solid var(--border);
+    padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; z-index: 20;
+  }
+  header .logo {
+    width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center;
+    background: rgba(99,102,241,.18); border: 1px solid rgba(99,102,241,.35); color: var(--accent2);
+    font-size: 19px;
+  }
+  header h1 { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  header h1 .badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 5px; vertical-align: 2px;
+    background: rgba(99,102,241,.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,.3); font-weight: 500;
+  }
+  header p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .spacer { flex: 1; }
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .controls input[type="search"] {
+    background: var(--panel2); border: 1px solid var(--border2); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; width: 170px; outline: none;
+  }
+  .controls input[type="search"]:focus { border-color: var(--accent); }
+  .controls select {
+    background: var(--panel2); border: 1px solid var(--border2); color: var(--text);
+    border-radius: 8px; padding: 6px 8px; font-size: 12px; outline: none;
+  }
+  .controls input[type="range"] { width: 110px; accent-color: var(--accent); }
+  .btn {
+    background: var(--panel2); border: 1px solid var(--border2); color: var(--text);
+    border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn:hover { background: #334155; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #4f46e5; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn:disabled:hover { background: var(--panel2); }
+  .btn.primary:disabled:hover { background: var(--accent); }
+
+  #statusBar {
+    padding: 6px 16px; font-size: 12px; color: var(--muted);
+    border-bottom: 1px solid var(--border); background: rgba(15,23,42,.5);
+    display: none; align-items: center; gap: 10px;
+  }
+  #statusBar.show { display: flex; }
+  #statusBar .zipname { color: var(--text); font-weight: 600; }
+
+  #layout { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 232px; flex-shrink: 0; display: none; flex-direction: column;
+    background: rgba(15,23,42,.65); border-right: 1px solid var(--border);
+  }
+  #sidebar.show { display: flex; }
+  #zipFilterWrap { padding: 8px; border-bottom: 1px solid var(--border); }
+  #zipFilter {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border2); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; outline: none;
+  }
+  #zipFilter:focus { border-color: var(--accent); }
+  #zipList { flex: 1; overflow-y: auto; }
+  .zipitem {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer;
+    border-bottom: 1px solid rgba(30,41,59,.6); font-size: 12px;
+  }
+  .zipitem:hover { background: rgba(51,65,85,.4); }
+  .zipitem.active { background: rgba(99,102,241,.20); }
+  .zipitem .zname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zipitem .zcount {
+    font-size: 11px; color: var(--muted); background: var(--panel2);
+    border: 1px solid var(--border2); border-radius: 20px; padding: 1px 7px; flex-shrink: 0;
+  }
+  .zipitem .zdel { color: var(--muted); padding: 0 2px; flex-shrink: 0; opacity: 0; }
+  .zipitem:hover .zdel { opacity: 1; }
+  .zipitem .zdel:hover { color: var(--danger); }
+  main { flex: 1; overflow-y: auto; position: relative; min-width: 0; }
+
+  /* 空状態 / ドロップゾーン */
+  #empty {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center;
+  }
+  #empty .big { font-size: 52px; opacity: .85; }
+  #empty h2 { font-size: 17px; }
+  #empty p { font-size: 13px; color: var(--muted); line-height: 1.8; max-width: 560px; }
+  #empty .startrow { display: flex; gap: 20px; width: min(880px, 92vw); }
+  #empty .startbtn {
+    flex: 1; border: 2px dashed var(--border2); border-radius: 20px; padding: 64px 20px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #empty .startbtn:hover { border-color: var(--accent); background: rgba(99,102,241,.06); }
+  #empty .startbtn .big { font-size: 68px; line-height: 1; }
+  #empty .startbtn h2 { font-size: 19px; }
+
+  /* サムネイルグリッド */
+  #grid {
+    display: grid; gap: 12px; padding: 16px; align-items: start;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb, 180px), 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .card:hover { border-color: var(--border2); }
+  .thumb {
+    background: #0b1220; display: block; min-height: 100px;
+    overflow: hidden; cursor: grab; position: relative;
+  }
+  .thumb:active { cursor: grabbing; }
+  .thumb .dlbtn {
+    position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; z-index: 3;
+    border-radius: 8px; display: grid; place-items: center; font-size: 15px;
+    background: rgba(15,23,42,.78); border: 1px solid var(--border2); color: var(--text);
+    opacity: 0; transition: opacity .12s; cursor: pointer;
+  }
+  .card:hover .thumb .dlbtn { opacity: 1; }
+  .thumb .dlbtn:hover { background: rgba(99,102,241,.85); }
+  .thumb .starbtn {
+    position: absolute; top: 8px; left: 8px; width: 30px; height: 30px; z-index: 3;
+    border-radius: 8px; display: grid; place-items: center; font-size: 16px;
+    background: rgba(15,23,42,.78); border: 1px solid var(--border2); color: #e2e8f0;
+    opacity: 0; transition: opacity .12s; cursor: pointer;
+  }
+  .card:hover .thumb .starbtn { opacity: 1; }
+  .thumb .starbtn.fav { opacity: 1; color: #facc15; border-color: rgba(250,204,21,.6); }
+  .btn.active { background: var(--accent); border-color: var(--accent); color: #facc15; }
+  #favEmpty {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    font-size: 64px; color: #475569;
+  }
+  .thumb .zoomicon {
+    position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px;
+    border-radius: 8px; display: grid; place-items: center; font-size: 15px;
+    background: rgba(15,23,42,.78); border: 1px solid var(--border2); color: var(--text);
+    opacity: 0; transition: opacity .12s; pointer-events: none;
+  }
+  .card:hover .thumb .zoomicon { opacity: 1; }
+  .thumb img { width: 100%; height: auto; display: block; -webkit-user-drag: none; }
+  .thumb .loading { color: var(--muted); font-size: 11px; padding: 8px; text-align: center; word-break: break-all; }
+  .thumb .err { color: var(--danger); font-size: 11px; padding: 8px; text-align: center; }
+  .meta { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .meta .name {
+    font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .meta .sub {
+    font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .meta .sub .dl {
+    color: var(--accent2); cursor: pointer; flex-shrink: 0; font-size: 15px; padding: 0 2px;
+  }
+  .meta .sub .dl:hover { color: #c7d2fe; }
+
+  /* ドラッグ中オーバーレイ */
+  #dropOverlay {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    background: rgba(2,6,23,.82); backdrop-filter: blur(2px);
+    align-items: center; justify-content: center; pointer-events: none;
+  }
+  #dropOverlay.show { display: flex; }
+  #dropOverlay .box {
+    border: 3px dashed var(--accent); border-radius: 20px; padding: 60px 90px;
+    font-size: 20px; font-weight: 700; color: #c7d2fe; text-align: center; line-height: 1.6;
+  }
+
+  /* 拡大ビューア */
+  #viewer {
+    position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column;
+    background: rgba(2,6,23,.96);
+  }
+  #viewer.open { display: flex; }
+  #viewerBar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); background: rgba(15,23,42,.9);
+  }
+  #viewerBar .vname { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #viewerBar .vinfo { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  #viewerStage { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+  #viewerStage:active { cursor: grabbing; }
+  #viewerImg {
+    position: absolute; left: 50%; top: 50%; max-width: none;
+    transform-origin: center center; -webkit-user-drag: none; user-select: none;
+  }
+  .navbtn {
+    position: absolute; top: 50%; transform: translateY(-50%); z-index: 5;
+    width: 44px; height: 64px; border-radius: 10px; border: 1px solid var(--border2);
+    background: rgba(15,23,42,.75); color: var(--text); font-size: 22px; cursor: pointer;
+  }
+  .navbtn:hover { background: rgba(51,65,85,.9); }
+  #prevBtn { left: 14px; } #nextBtn { right: 14px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: #1e293b; border: 1px solid var(--border2); color: var(--text);
+    padding: 9px 18px; border-radius: 10px; font-size: 13px; z-index: 80;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    max-width: 86vw; text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="controls">
+    <button class="btn" id="folderBtn" title="📁">📁</button>
+    <button class="btn" id="favBtn" title="★">★</button>
+    <input type="range" id="sizeRange" min="110" max="320" value="180" title="🔍">
+    <button class="btn" id="clearBtn" title="✕" disabled>✕</button>
+  </div>
+</header>
+
+<div id="statusBar"></div>
+
+<div id="layout">
+<aside id="sidebar"><div id="zipFilterWrap"><input type="search" id="zipFilter" placeholder="🔍"></div><div id="zipList"></div></aside>
+<main id="main">
+  <div id="empty">
+    <div class="startrow">
+      <div class="startbtn" id="zipPickBtn">
+        <div class="big">📦</div>
+        <h2>ZIPファイル</h2>
+      </div>
+      <div class="startbtn" id="folderPickBtn">
+        <div class="big">📁</div>
+        <h2>フォルダ</h2>
+      </div>
+    </div>
+  </div>
+  <div id="favEmpty">☆</div>
+  <div id="grid" style="display:none"></div>
+</main>
+</div>
+
+<div id="dropOverlay"><div class="box">📦⬇</div></div>
+
+<div id="viewer">
+  <div id="viewerBar">
+    <button class="btn" id="viewerClose" title="Esc">✕</button>
+    <div class="vname" id="viewerName"></div>
+    <div class="vinfo" id="viewerInfo"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="zoomOutBtn">−</button>
+    <button class="btn" id="zoomResetBtn">100%</button>
+    <button class="btn" id="zoomInBtn">＋</button>
+    <button class="btn primary" id="viewerDownload" title="⬇ 取り出す">⬇</button>
+  </div>
+  <div id="viewerStage">
+    <img id="viewerImg" alt="">
+    <button class="navbtn" id="prevBtn">‹</button>
+    <button class="navbtn" id="nextBtn">›</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="fileInput" accept=".zip,.cbz,application/zip" multiple style="display:none">
+<input type="file" id="folderInput" webkitdirectory style="display:none">
+
+<!-- ============ ZIP解析コア（DOM非依存） ============ -->
+<script id="zip-core">
+'use strict';
+const ZipCore = (() => {
+  const SIG_EOCD = 0x06054b50, SIG_CENTRAL = 0x02014b50, SIG_LOCAL = 0x04034b50;
+
+  function findEocd(view) {
+    const len = view.byteLength;
+    const minPos = Math.max(0, len - 22 - 0xFFFF);
+    for (let pos = len - 22; pos >= minPos; pos--) {
+      if (view.getUint32(pos, true) === SIG_EOCD) {
+        const commentLen = view.getUint16(pos + 20, true);
+        if (pos + 22 + commentLen === len) return pos;
+      }
+    }
+    return -1;
+  }
+
+  function decodeName(bytes, isUtf8) {
+    if (isUtf8) return new TextDecoder('utf-8').decode(bytes);
+    // UTF-8フラグなしは日本語環境ではShift_JISが多いのでそちらで試す
+    try { return new TextDecoder('shift-jis').decode(bytes); }
+    catch { return new TextDecoder('utf-8').decode(bytes); }
+  }
+
+  function parseZip(buffer) {
+    const view = new DataView(buffer);
+    const eocd = findEocd(view);
+    if (eocd < 0) throw new Error('ZIPの終端レコードが見つかりません（壊れているかZIPではありません）');
+    let total = view.getUint16(eocd + 10, true);
+    let cdOffset = view.getUint32(eocd + 16, true);
+    let cdSize = view.getUint32(eocd + 12, true);
+    // ZIP64
+    if (total === 0xFFFF || cdOffset === 0xFFFFFFFF || cdSize === 0xFFFFFFFF) {
+      // EOCDの直前にあるZIP64 locatorを探す
+      const locPos = eocd - 20;
+      if (locPos >= 0 && view.getUint32(locPos, true) === 0x07064b50) {
+        const recOff = Number(view.getBigUint64(locPos + 8, true));
+        if (view.getUint32(recOff, true) === 0x06064b50) {
+          if (total === 0xFFFF) total = Number(view.getBigUint64(recOff + 32, true));
+          if (cdSize === 0xFFFFFFFF) cdSize = Number(view.getBigUint64(recOff + 40, true));
+          if (cdOffset === 0xFFFFFFFF) cdOffset = Number(view.getBigUint64(recOff + 48, true));
+        }
+      }
+    }
+    const entries = [];
+    let pos = cdOffset;
+    for (let i = 0; i < total; i++) {
+      if (pos + 46 > view.byteLength || view.getUint32(pos, true) !== SIG_CENTRAL) break;
+      const flags = view.getUint16(pos + 8, true);
+      const method = view.getUint16(pos + 10, true);
+      let compSize = view.getUint32(pos + 20, true);
+      let rawSize = view.getUint32(pos + 24, true);
+      const nameLen = view.getUint16(pos + 28, true);
+      const extraLen = view.getUint16(pos + 30, true);
+      const commentLen = view.getUint16(pos + 32, true);
+      let localOffset = view.getUint32(pos + 42, true);
+      const nameBytes = new Uint8Array(buffer, pos + 46, nameLen);
+      const name = decodeName(nameBytes, !!(flags & 0x800));
+      // ZIP64拡張フィールド
+      if (rawSize === 0xFFFFFFFF || compSize === 0xFFFFFFFF || localOffset === 0xFFFFFFFF) {
+        let ep = pos + 46 + nameLen;
+        const eEnd = ep + extraLen;
+        let p = ep;
+        while (p + 4 <= eEnd) {
+          const tag = view.getUint16(p, true), sz = view.getUint16(p + 2, true);
+          if (tag === 0x0001) {
+            let q = p + 4;
+            if (rawSize === 0xFFFFFFFF) { rawSize = Number(view.getBigUint64(q, true)); q += 8; }
+            if (compSize === 0xFFFFFFFF) { compSize = Number(view.getBigUint64(q, true)); q += 8; }
+            if (localOffset === 0xFFFFFFFF) { localOffset = Number(view.getBigUint64(q, true)); q += 8; }
+          }
+          p += 4 + sz;
+        }
+      }
+      entries.push({
+        name, method, flags,
+        compressedSize: compSize, size: rawSize, localOffset,
+        isDir: name.endsWith('/'),
+        encrypted: !!(flags & 0x1),
+      });
+      pos += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+  }
+
+  async function inflateRaw(u8) {
+    const ds = new DecompressionStream('deflate-raw');
+    const stream = new Blob([u8]).stream().pipeThrough(ds);
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function extract(buffer, entry) {
+    if (entry.encrypted) throw new Error('パスワード付きの項目は開けません');
+    const view = new DataView(buffer);
+    const off = entry.localOffset;
+    if (view.getUint32(off, true) !== SIG_LOCAL) throw new Error('ローカルヘッダが見つかりません: ' + entry.name);
+    const nameLen = view.getUint16(off + 26, true);
+    const extraLen = view.getUint16(off + 28, true);
+    const dataStart = off + 30 + nameLen + extraLen;
+    const comp = new Uint8Array(buffer, dataStart, entry.compressedSize);
+    if (entry.method === 0) return comp.slice();
+    if (entry.method === 8) return await inflateRaw(comp);
+    throw new Error('未対応の圧縮形式です (method=' + entry.method + '): ' + entry.name);
+  }
+
+  return { parseZip, extract };
+})();
+</script>
+
+<!-- ============ UI ============ -->
+<script>
+'use strict';
+const IMAGE_TYPES = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', svg: 'image/svg+xml',
+  ico: 'image/x-icon', tif: 'image/tiff', tiff: 'image/tiff', jfif: 'image/jpeg',
+};
+const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
+
+let items = [];        // 現在選択中のZIPの画像一覧 {id, zipName, buffer, entry, base, dir, ext, mime, blobUrl, blob, loadPromise, el}
+let archives = [];     // {id, name, path, items}
+let currentArchive = null;
+let nextId = 1;
+let nextArchiveId = 1;
+let sidebarPinned = false; // フォルダを落としたら1つでもリストを出す
+
+/* ---------- お気に入り（IndexedDBに永続化） ---------- */
+let favKeys = new Set();
+let showingFavs = false;
+let favItems = [];
+let _idbPromise = null;
+function idbOpen() {
+  if (!_idbPromise) {
+    _idbPromise = new Promise((resolve, reject) => {
+      if (!window.indexedDB) { reject(new Error('IndexedDBが使えません')); return; }
+      const rq = indexedDB.open('zip-viewer', 1);
+      rq.onupgradeneeded = () => { rq.result.createObjectStore('favorites', { keyPath: 'key' }); };
+      rq.onsuccess = () => resolve(rq.result);
+      rq.onerror = () => reject(rq.error);
+    });
+  }
+  return _idbPromise;
+}
+async function idbReq(mode, op) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('favorites', mode);
+    const store = tx.objectStore('favorites');
+    let result;
+    const rq = op(store);
+    if (rq) { rq.onsuccess = () => { result = rq.result; }; rq.onerror = () => reject(rq.error); }
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('保存が中断されました'));
+  });
+}
+const idbAllKeys = () => idbReq('readonly', s => s.getAllKeys());
+const idbAll = () => idbReq('readonly', s => s.getAll());
+const idbPut = rec => idbReq('readwrite', s => s.put(rec));
+const idbDel = key => idbReq('readwrite', s => s.delete(key));
+idbAllKeys().then(keys => {
+  favKeys = new Set(keys);
+  for (const arc of archives) for (const it of arc.items) it.fav = favKeys.has(it.favKey);
+  refreshStars();
+}).catch(() => { /* IDBが使えない環境では★はセッション内のみ */ });
+function refreshStars() {
+  for (const arc of archives) for (const it of arc.items) {
+    if (!it.el) continue;
+    const b = it.el.querySelector('.starbtn');
+    if (b) { b.classList.toggle('fav', !!it.fav); b.textContent = it.fav ? '★' : '☆'; }
+  }
+  if (showingFavs) for (const it of favItems) {
+    if (!it.el) continue;
+    const b = it.el.querySelector('.starbtn');
+    if (b) { b.classList.toggle('fav', !!it.fav); b.textContent = it.fav ? '★' : '☆'; }
+  }
+}
+function syncFavState(key, fav) {
+  for (const arc of archives) for (const it of arc.items) if (it.favKey === key) it.fav = fav;
+  for (const f of favItems) if (f.favKey === key) f.fav = fav;
+}
+async function toggleFavorite(item) {
+  try {
+    if (item.fav) {
+      await idbDel(item.favKey);
+      favKeys.delete(item.favKey);
+      syncFavState(item.favKey, false);
+      if (showingFavs) { favItems = favItems.filter(f => f.favKey !== item.favKey); render(); }
+      refreshStars();
+      toast('☆');
+    } else {
+      await loadItem(item);
+      const rec = {
+        key: item.favKey, zipName: item.zipName, entryName: item.entry.name,
+        base: item.base, mime: item.mime, blob: item.blob, addedAt: Date.now(),
+      };
+      await idbPut(rec); // tx完了まで待つ＝実際に保存できたことを確認
+      favKeys.add(item.favKey);
+      syncFavState(item.favKey, true);
+      refreshStars();
+      toast('★');
+    }
+  } catch (e) {
+    toast('★⚠ ' + e.message, 3600); // 失敗時は★を付けない（ロールバック）
+    syncFavState(item.favKey, favKeys.has(item.favKey));
+    refreshStars();
+  }
+}
+async function toggleFavView() {
+  if (showingFavs) {
+    showingFavs = false;
+    $('favBtn').classList.remove('active');
+    render();
+    return;
+  }
+  let recs = [];
+  try { recs = await idbAll(); } catch { recs = []; }
+  recs.sort((a, b) => b.addedAt - a.addedAt);
+  favItems = recs.map(rec => {
+    const url = URL.createObjectURL(rec.blob);
+    return {
+      id: nextId++, zipName: rec.zipName, buffer: null,
+      entry: { name: rec.entryName, size: rec.blob.size },
+      base: rec.base, dir: '', ext: extOf(rec.entryName), mime: rec.mime,
+      blobUrl: url, blob: rec.blob, loadPromise: Promise.resolve(url), el: null,
+      fav: true, favKey: rec.key,
+    };
+  });
+  showingFavs = true;
+  $('favBtn').classList.add('active');
+  closeViewer();
+  render();
+}
+let visibleItems = []; // 絞り込み・並び替え後の表示順（ビューアの前後移動に使う）
+
+const $ = id => document.getElementById(id);
+const grid = $('grid'), emptyEl = $('empty'), statusBar = $('statusBar');
+const clearBtn = $('clearBtn');
+
+function toast(msg, ms = 2600) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), ms);
+}
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+function extOf(name) {
+  const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : '';
+}
+
+/* ---------- 取り出し（展開） ---------- */
+const inflight = new Map(); // 同時展開数の制限
+let running = 0;
+const waiters = [];
+function withLimit(fn) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      running++;
+      fn().then(resolve, reject).finally(() => { running--; const w = waiters.shift(); if (w) w(); });
+    };
+    if (running < 4) run(); else waiters.push(run);
+  });
+}
+function loadItem(item) {
+  if (!item.loadPromise) {
+    item.loadPromise = withLimit(async () => {
+      const data = await ZipCore.extract(item.buffer, item.entry);
+      item.blob = new Blob([data], { type: item.mime });
+      item.blobUrl = URL.createObjectURL(item.blob);
+      return item.blobUrl;
+    });
+  }
+  return item.loadPromise;
+}
+async function downloadItem(item) {
+  try {
+    await loadItem(item);
+    const a = document.createElement('a');
+    a.href = item.blobUrl;
+    a.download = item.base;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast('⬇');
+  } catch (e) {
+    toast('取り出せませんでした: ' + e.message, 3600);
+  }
+}
+
+/* ---------- サムネイル ---------- */
+const observer = new IntersectionObserver(entries => {
+  for (const en of entries) {
+    if (!en.isIntersecting) continue;
+    const item = en.target._item;
+    observer.unobserve(en.target);
+    loadThumb(item, en.target);
+  }
+}, { root: $('main'), rootMargin: '400px' });
+
+async function loadThumb(item, thumbEl) {
+  try {
+    const url = await loadItem(item);
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = item.base;
+    img.draggable = false;
+    thumbEl.innerHTML = '';
+    thumbEl.appendChild(img);
+    const zi = document.createElement('div');
+    zi.className = 'zoomicon';
+    zi.textContent = '🔍';
+    thumbEl.appendChild(zi);
+    const dl = document.createElement('div');
+    dl.className = 'dlbtn';
+    dl.textContent = '⬇';
+    dl.title = '⬇';
+    dl.addEventListener('click', e => { e.stopPropagation(); downloadItem(item); });
+    thumbEl.appendChild(dl);
+    const star = document.createElement('div');
+    star.className = 'starbtn' + (item.fav ? ' fav' : '');
+    star.textContent = item.fav ? '★' : '☆';
+    star.title = '★';
+    star.addEventListener('click', e => { e.stopPropagation(); toggleFavorite(item); });
+    thumbEl.appendChild(star);
+  } catch (e) {
+    thumbEl.innerHTML = '<div class="err">開けません<br>' + escapeHtml(e.message) + '</div>';
+  }
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function buildCard(item) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.id = item.id;
+
+  const thumb = document.createElement('div');
+  thumb.className = 'thumb';
+  thumb.innerHTML = '<div class="loading">…</div>';
+  thumb._item = item;
+  thumb.addEventListener('click', () => openViewer(item));
+
+  // --- 外へのドラッグで取り出し（Chrome / Edge） ---
+  card.draggable = true;
+  card.addEventListener('dragstart', async e => {
+    // サムネイル未読込でもドラッグ開始に間に合うよう、先に展開しておく対象は読み込み済みのもの。
+    // 未読込の場合はDownloadURLをセットできないので、通常ドラッグを止めて読み込みを促す。
+    if (!item.blobUrl) {
+      e.preventDefault();
+      toast('サムネイルの読み込みが終わってからドラッグしてください');
+      loadThumb(item, thumb);
+      return;
+    }
+    try {
+      e.dataTransfer.setData('DownloadURL', item.mime + ':' + item.base + ':' + item.blobUrl);
+      e.dataTransfer.setData('text/uri-list', item.blobUrl);
+      e.dataTransfer.effectAllowed = 'copy';
+    } catch { /* 非対応ブラウザでは「⬇ 保存」を使ってもらう */ }
+  });
+
+  card.appendChild(thumb);
+  item.el = card;
+  observer.observe(thumb);
+  return card;
+}
+
+function render() {
+  const source = showingFavs ? favItems : items;
+  visibleItems = [...source];
+  if (!showingFavs) visibleItems.sort((a, b) => collator.compare(a.entry.name, b.entry.name));
+  grid.innerHTML = '';
+  for (const it of visibleItems) grid.appendChild(it.el || buildCard(it));
+  const has = source.length > 0;
+  grid.style.display = has ? 'grid' : 'none';
+  emptyEl.style.display = (!has && !showingFavs) ? 'flex' : 'none';
+  $('favEmpty').style.display = (!has && showingFavs) ? 'flex' : 'none';
+  clearBtn.disabled = archives.length === 0;
+  updateStatus();
+}
+function updateStatus() {
+  if (showingFavs) {
+    statusBar.classList.add('show');
+    statusBar.innerHTML = '<span class="zipname">★</span><span>🖼️ ' + favItems.length + '</span>';
+    return;
+  }
+  if (!items.length) { statusBar.classList.remove('show'); statusBar.innerHTML = ''; return; }
+  const zips = [...new Set(items.map(i => i.zipName))];
+  statusBar.classList.add('show');
+  statusBar.innerHTML =
+    zips.map(z => '<span class="zipname">📦 ' + escapeHtml(z) + '</span>').join('') +
+    '<span>🖼️ ' + items.length + (visibleItems.length !== items.length ? ' / ' + visibleItems.length : '') + '</span>';
+}
+
+/* ---------- ZIPリスト（サイドバー） ---------- */
+let zipFilterText = '';
+function displayArchives() {
+  const q = zipFilterText.trim().toLowerCase();
+  return archives
+    .filter(arc => !q || arc.name.toLowerCase().includes(q) || (arc.path || '').toLowerCase().includes(q))
+    .sort((a, b) => collator.compare(a.name, b.name) || collator.compare(a.path || '', b.path || ''));
+}
+function renderSidebar() {
+  const list = $('zipList');
+  list.innerHTML = '';
+  const rows = displayArchives();
+  let activeRow = null;
+  for (const arc of rows) {
+    const row = document.createElement('div');
+    row.className = 'zipitem' + (arc === currentArchive ? ' active' : '');
+    if (arc === currentArchive) activeRow = row;
+    row.title = arc.path || arc.name;
+    row.innerHTML =
+      '<span>📦</span>' +
+      '<span class="zname">' + escapeHtml(arc.name) + '</span>' +
+      '<span class="zcount">' + arc.items.length + '</span>' +
+      '<span class="zdel" title="✕">✕</span>';
+    row.addEventListener('click', () => selectArchive(arc));
+    row.querySelector('.zdel').addEventListener('click', e => { e.stopPropagation(); removeArchive(arc); });
+    list.appendChild(row);
+  }
+  $('sidebar').classList.toggle('show', archives.length > 1 || (sidebarPinned && archives.length > 0));
+  if (activeRow) {
+    // 選択中のZIPが常に見えるよう、左メニューのスクロールを追従させる（実座標で判定）
+    const listEl = $('zipList');
+    const listRect = listEl.getBoundingClientRect();
+    const rowRect = activeRow.getBoundingClientRect();
+    if (rowRect.top < listRect.top) listEl.scrollTop -= (listRect.top - rowRect.top);
+    else if (rowRect.bottom > listRect.bottom) listEl.scrollTop += (rowRect.bottom - listRect.bottom);
+  }
+}
+$('zipFilter').addEventListener('input', e => { zipFilterText = e.target.value; renderSidebar(); });
+function selectArchive(arc) {
+  currentArchive = arc;
+  items = arc ? arc.items : [];
+  if (showingFavs) { showingFavs = false; $('favBtn').classList.remove('active'); }
+  closeViewer();
+  renderSidebar();
+  render();
+  $('main').scrollTop = 0;
+}
+/* サムネイル欄の端でスクロールを続けると前/次のZIPへ */
+let lastPageSwitch = 0;
+function stepArchive(dir) {
+  const rows = displayArchives();
+  if (rows.length < 2 || !currentArchive) return false;
+  const idx = rows.indexOf(currentArchive);
+  if (idx < 0) return false;
+  const next = rows[idx + dir];
+  if (!next) return false;
+  selectArchive(next);
+  return true;
+}
+$('main').addEventListener('wheel', e => {
+  if (viewer.classList.contains('open') || showingFavs) return;
+  const el = $('main');
+  const atTop = el.scrollTop <= 0;
+  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+  const dir = (e.deltaY > 0 && atBottom) ? 1 : (e.deltaY < 0 && atTop) ? -1 : 0;
+  if (!dir) return;
+  const now = Date.now();
+  if (now - lastPageSwitch < 1200) return;
+  if (stepArchive(dir)) { lastPageSwitch = now; e.preventDefault(); }
+}, { passive: false });
+function removeArchive(arc) {
+  for (const it of arc.items) if (it.blobUrl) URL.revokeObjectURL(it.blobUrl);
+  archives = archives.filter(a => a !== arc);
+  if (currentArchive === arc) {
+    currentArchive = null; items = [];
+    if (archives.length) selectArchive(archives[0]);
+    else { renderSidebar(); render(); }
+  } else renderSidebar();
+}
+
+/* ---------- ZIP読み込み ---------- */
+async function addZipFile(file, relPath) {
+  const isZipName = /\.zip$|\.cbz$/i.test(file.name);
+  try {
+    const buffer = await file.arrayBuffer();
+    const head = buffer.byteLength >= 4 ? new DataView(buffer).getUint32(0, true) : 0;
+    if (head !== 0x04034b50 && !isZipName) throw new Error('ZIPファイルではありません');
+    const entries = ZipCore.parseZip(buffer);
+    const images = entries.filter(en => !en.isDir && IMAGE_TYPES[extOf(en.name)]);
+    if (!images.length) return null;
+    const arc = { id: nextArchiveId++, name: file.name, path: relPath || file.name, items: [] };
+    for (const entry of images) {
+      const parts = entry.name.split('/');
+      const favKey = file.name + '|' + file.size + '|' + entry.name;
+      arc.items.push({
+        id: nextId++, zipName: file.name, buffer, entry,
+        base: parts[parts.length - 1], dir: parts.slice(0, -1).join('/'),
+        ext: extOf(entry.name), mime: IMAGE_TYPES[extOf(entry.name)],
+        blobUrl: null, blob: null, loadPromise: null, el: null,
+        favKey, fav: favKeys.has(favKey),
+      });
+    }
+    archives.push(arc);
+    renderSidebar();
+    if (!currentArchive) selectArchive(arc);
+    return arc;
+  } catch (e) {
+    toast('📦⚠ ' + file.name + ': ' + e.message, 4200);
+    return null;
+  }
+}
+function addPlainImages(files, groupName) {
+  if (!files.length) return null;
+  const arc = { id: nextArchiveId++, name: groupName || '🖼️', path: groupName || '', items: [] };
+  for (const file of files) {
+    const url = URL.createObjectURL(file);
+    const favKey = 'plain|' + file.name + '|' + file.size;
+    arc.items.push({
+      id: nextId++, zipName: arc.name, buffer: null,
+      entry: { name: file.name, size: file.size },
+      base: file.name, dir: '', ext: extOf(file.name), mime: file.type || IMAGE_TYPES[extOf(file.name)] || 'image/png',
+      blobUrl: url, blob: file, loadPromise: Promise.resolve(url), el: null,
+      favKey, fav: favKeys.has(favKey),
+    });
+  }
+  archives.push(arc);
+  renderSidebar();
+  if (!currentArchive) selectArchive(arc);
+  return arc;
+}
+async function handleFiles(fileList, relPaths) {
+  const pairs = [...fileList].map((f, i) => ({ f, path: relPaths ? relPaths[i] : null }));
+  pairs.sort((a, b) => collator.compare(a.path || a.f.name, b.path || b.f.name));
+  const added = [];
+  const plain = [];
+  for (let i = 0; i < pairs.length; i++) {
+    const f = pairs[i].f;
+    if (/\.zip$|\.cbz$/i.test(f.name) || f.type === 'application/zip') {
+      const arc = await addZipFile(f, pairs[i].path);
+      if (arc) added.push(arc);
+    } else if (f.type.startsWith('image/') || IMAGE_TYPES[extOf(f.name)]) {
+      plain.push(f);
+    } else {
+      const arc = await addZipFile(f, pairs[i].path); // 拡張子なし等はZIPとして試す
+      if (arc) added.push(arc);
+    }
+  }
+  if (plain.length) {
+    const arc = addPlainImages(plain, plain.length === 1 ? plain[0].name : '🖼️ ' + plain.length);
+    if (arc) added.unshift(arc);
+  }
+  // 既に別のZIPを開いていた場合だけ、今回の先頭に切り替える（読み込み中は逐次表示済み）
+  if (added.length && currentArchive && !added.includes(currentArchive) && archives.length > added.length) selectArchive(added[0]);
+  renderSidebar();
+}
+/* フォルダドロップ: 中のZIPを再帰的に集める */
+function entryToFile(entry) {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+async function readAllEntries(dirEntry) {
+  const reader = dirEntry.createReader();
+  const all = [];
+  for (;;) {
+    const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+    if (!batch.length) break;
+    all.push(...batch);
+  }
+  return all;
+}
+async function traverseEntry(entry, path, out) {
+  if (entry.isFile) {
+    out.push({ file: await entryToFile(entry), path: path + entry.name });
+  } else if (entry.isDirectory) {
+    for (const child of await readAllEntries(entry)) {
+      await traverseEntry(child, path + entry.name + '/', out);
+    }
+  }
+}
+async function handleDrop(dataTransfer) {
+  const entries = [];
+  if (dataTransfer.items && dataTransfer.items.length) {
+    for (const it of dataTransfer.items) {
+      if (it.kind !== 'file') continue;
+      const en = it.webkitGetAsEntry ? it.webkitGetAsEntry() : null;
+      if (en) entries.push(en);
+    }
+  }
+  if (!entries.length) { await handleFiles(dataTransfer.files); return; }
+  if (entries.some(en => en.isDirectory)) sidebarPinned = true;
+  const found = [];
+  for (const en of entries) {
+    try { await traverseEntry(en, '', found); } catch { /* 読めない項目は飛ばす */ }
+  }
+  if (!found.length && dataTransfer.files.length) { await handleFiles(dataTransfer.files); return; }
+  found.sort((a, b) => collator.compare(a.path, b.path));
+  await handleFiles(found.map(x => x.file), found.map(x => x.path));
+}
+
+/* ---------- ドラッグ＆ドロップ（読み込み側） ---------- */
+let dragDepth = 0;
+window.addEventListener('dragenter', e => {
+  e.preventDefault();
+  if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) {
+    dragDepth++;
+    $('dropOverlay').classList.add('show');
+  }
+});
+window.addEventListener('dragleave', e => {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) $('dropOverlay').classList.remove('show');
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  dragDepth = 0;
+  $('dropOverlay').classList.remove('show');
+  handleDrop(e.dataTransfer).catch(err => toast('⚠ ' + err.message, 4200));
+});
+
+/* ---------- フォルダ選択 ---------- */
+const folderInput = $('folderInput');
+$('folderBtn').addEventListener('click', () => folderInput.click());
+$('favBtn').addEventListener('click', toggleFavView);
+$('folderPickBtn').addEventListener('click', () => folderInput.click());
+const fileInput = $('fileInput');
+$('zipPickBtn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { handleFiles(fileInput.files); fileInput.value = ''; });
+folderInput.addEventListener('change', () => {
+  sidebarPinned = true;
+  handleFiles(folderInput.files, [...folderInput.files].map(f => f.webkitRelativePath || f.name));
+  folderInput.value = '';
+});
+
+clearBtn.addEventListener('click', () => {
+  for (const arc of archives) for (const it of arc.items) if (it.blobUrl) URL.revokeObjectURL(it.blobUrl);
+  archives = []; currentArchive = null; sidebarPinned = false;
+  showingFavs = false; $('favBtn').classList.remove('active');
+  zipFilterText = ''; $('zipFilter').value = '';
+  items = []; visibleItems = [];
+  closeViewer();
+  renderSidebar();
+  render();
+});
+$('sizeRange').addEventListener('input', e => {
+  grid.style.setProperty('--thumb', e.target.value + 'px');
+});
+
+/* ---------- 拡大ビューア ---------- */
+let viewItem = null, scale = 1, tx = 0, ty = 0;
+const viewer = $('viewer'), viewerImg = $('viewerImg'), stage = $('viewerStage');
+
+function applyTransform() {
+  viewerImg.style.transform = 'translate(calc(-50% + ' + tx + 'px), calc(-50% + ' + ty + 'px)) scale(' + scale + ')';
+}
+function fitScale() {
+  const r = stage.getBoundingClientRect();
+  const nw = viewerImg.naturalWidth, nh = viewerImg.naturalHeight;
+  if (!nw || !nh) return 1;
+  return Math.min(r.width / nw, r.height / nh, 1);
+}
+async function openViewer(item) {
+  try {
+    await loadItem(item);
+  } catch (e) {
+    toast('開けませんでした: ' + e.message, 3600);
+    return;
+  }
+  viewItem = item;
+  viewerImg.src = item.blobUrl;
+  $('viewerName').textContent = '';
+  const idx = visibleItems.indexOf(item);
+  $('viewerInfo').textContent =
+    (idx >= 0 ? (idx + 1) + ' / ' + visibleItems.length : '');
+  viewer.classList.add('open');
+  viewerImg.onload = () => { scale = fitScale(); tx = 0; ty = 0; applyTransform(); updateZoomLabel(); };
+  if (viewerImg.complete && viewerImg.naturalWidth) viewerImg.onload();
+}
+function closeViewer() {
+  viewer.classList.remove('open');
+  viewItem = null;
+}
+function stepViewer(d) {
+  if (!viewItem) return;
+  const idx = visibleItems.indexOf(viewItem);
+  if (idx < 0) return;
+  const next = visibleItems[(idx + d + visibleItems.length) % visibleItems.length];
+  if (next) openViewer(next);
+}
+function setScale(s) {
+  scale = Math.min(12, Math.max(0.05, s));
+  if (scale <= fitScale() * 1.01) { tx = 0; ty = 0; }
+  applyTransform();
+  updateZoomLabel();
+}
+function updateZoomLabel() {
+  const f = fitScale() || 1;
+  $('zoomResetBtn').textContent = Math.round((scale / f) * 100) + '%';
+}
+$('viewerClose').addEventListener('click', closeViewer);
+$('prevBtn').addEventListener('click', () => stepViewer(-1));
+$('nextBtn').addEventListener('click', () => stepViewer(1));
+$('viewerDownload').addEventListener('click', () => { if (viewItem) downloadItem(viewItem); });
+$('zoomInBtn').addEventListener('click', () => setScale(scale * 1.25));
+$('zoomOutBtn').addEventListener('click', () => setScale(scale / 1.25));
+$('zoomResetBtn').addEventListener('click', () => { scale = fitScale(); tx = 0; ty = 0; applyTransform(); updateZoomLabel(); });
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  setScale(scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+}, { passive: false });
+stage.addEventListener('dblclick', e => {
+  if (e.target === viewerImg || e.target === stage) {
+    if (scale > fitScale() * 1.05) { scale = fitScale(); tx = 0; ty = 0; applyTransform(); updateZoomLabel(); }
+    else setScale(fitScale() * 2);
+  }
+});
+let panning = false, panStart = null, downPos = null;
+stage.addEventListener('pointerdown', e => {
+  if (e.target.closest('.navbtn')) return;
+  panning = true; panStart = { x: e.clientX - tx, y: e.clientY - ty };
+  downPos = { x: e.clientX, y: e.clientY };
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener('click', e => {
+  if (e.target !== stage) return;
+  if (downPos && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 6) return;
+  closeViewer();
+});
+stage.addEventListener('pointermove', e => {
+  if (!panning) return;
+  tx = e.clientX - panStart.x; ty = e.clientY - panStart.y;
+  applyTransform();
+});
+stage.addEventListener('pointerup', () => { panning = false; });
+window.addEventListener('keydown', e => {
+  if (!viewer.classList.contains('open')) return;
+  if (e.key === 'Escape') closeViewer();
+  else if (e.key === 'ArrowRight') stepViewer(1);
+  else if (e.key === 'ArrowLeft') stepViewer(-1);
+});
+
+render();
+</script>
+</body>
+</html>
