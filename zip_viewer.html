@@ -212,6 +212,16 @@
   }
   .navbtn:hover { background: rgba(51,65,85,.9); }
   #prevBtn { left: 14px; } #nextBtn { right: 14px; }
+  .viewerbtn {
+    position: absolute; top: 14px; z-index: 6; width: 42px; height: 42px;
+    border-radius: 10px; display: grid; place-items: center; font-size: 19px;
+    background: rgba(15,23,42,.78); border: 1px solid var(--border2); color: var(--text);
+    cursor: pointer;
+  }
+  .viewerbtn:hover { background: rgba(51,65,85,.9); }
+  #viewerStar { left: 14px; }
+  #viewerStar.fav { color: #facc15; border-color: rgba(250,204,21,.6); }
+  #viewerDl { right: 14px; }
 
   #toast {
     position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
@@ -271,6 +281,8 @@
   </div>
   <div id="viewerStage">
     <img id="viewerImg" alt="">
+    <div class="viewerbtn" id="viewerStar" title="★">☆</div>
+    <div class="viewerbtn" id="viewerDl" title="⬇">⬇</div>
     <button class="navbtn" id="prevBtn">‹</button>
     <button class="navbtn" id="nextBtn">›</button>
   </div>
@@ -952,6 +964,7 @@ async function openViewer(item) {
   viewItem = item;
   viewerImg.src = item.blobUrl;
   $('viewerName').textContent = '';
+  syncViewerBtns();
   const idx = visibleItems.indexOf(item);
   $('viewerInfo').textContent =
     (idx >= 0 ? (idx + 1) + ' / ' + visibleItems.length : '');
@@ -980,6 +993,25 @@ function updateZoomLabel() {
   const f = fitScale() || 1;
   $('zoomResetBtn').textContent = Math.round((scale / f) * 100) + '%';
 }
+function syncViewerBtns() {
+  const b = $('viewerStar');
+  if (!viewItem) return;
+  b.textContent = viewItem.fav ? '★' : '☆';
+  b.classList.toggle('fav', !!viewItem.fav);
+}
+$('viewerStar').addEventListener('pointerdown', e => e.stopPropagation());
+$('viewerDl').addEventListener('pointerdown', e => e.stopPropagation());
+$('viewerStar').addEventListener('click', async e => {
+  e.stopPropagation();
+  if (!viewItem) return;
+  await toggleFavorite(viewItem);
+  syncViewerBtns();
+  if (showingFavs && !viewItem.fav) closeViewer();
+});
+$('viewerDl').addEventListener('click', e => {
+  e.stopPropagation();
+  if (viewItem) downloadItem(viewItem);
+});
 $('viewerClose').addEventListener('click', closeViewer);
 $('prevBtn').addEventListener('click', () => stepViewer(-1));
 $('nextBtn').addEventListener('click', () => stepViewer(1));
