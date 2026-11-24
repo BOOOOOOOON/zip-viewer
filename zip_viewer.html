@@ -239,6 +239,9 @@
   <div class="controls">
     <button class="btn" id="folderBtn" title="📁">📁</button>
     <button class="btn" id="favBtn" title="★">★</button>
+    <button class="btn" id="favExportBtn" title="📤">📤</button>
+    <button class="btn" id="favImportBtn" title="📥">📥</button>
+    <input type="file" id="favImportFile" accept=".json,application/json" style="display:none">
     <input type="range" id="sizeRange" min="110" max="320" value="180" title="🔍">
     <button class="btn" id="clearBtn" title="✕" disabled>✕</button>
   </div>
@@ -917,6 +920,67 @@ window.addEventListener('drop', e => {
 const folderInput = $('folderInput');
 $('folderBtn').addEventListener('click', () => folderInput.click());
 $('favBtn').addEventListener('click', toggleFavView);
+
+/* ---------- favorites export / import (JSON) ---------- */
+async function blobToB64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function b64ToBlob(b64, mime) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime || 'application/octet-stream' });
+}
+async function exportFavorites() {
+  const records = await idbAll();
+  if (!records.length) { toast('★がありません'); return; }
+  const favorites = [];
+  for (const r of records) {
+    favorites.push({ key: r.key, zipName: r.zipName, entryName: r.entryName, base: r.base, mime: r.mime, size: r.blob.size, addedAt: r.addedAt, data: await blobToB64(r.blob) });
+  }
+  const payload = { app: 'zip-viewer', version: 1, exportedAt: new Date().toISOString(), favorites };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'zip-viewer-favorites.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(favorites.length + '件エクスポートしました');
+}
+async function importFavorites(file) {
+  let parsed;
+  try { parsed = JSON.parse(await file.text()); }
+  catch { toast('JSONとして読めませんでした'); return; }
+  const list = Array.isArray(parsed) ? parsed : parsed.favorites;
+  if (!Array.isArray(list)) { toast('形式が違います'); return; }
+  let count = 0;
+  for (const r of list) {
+    if (!r || !r.key || !r.data || !r.entryName) continue;
+    try {
+      const blob = b64ToBlob(r.data, r.mime);
+      await idbPut({ key: r.key, zipName: r.zipName || '', entryName: r.entryName, base: r.base || r.entryName.replace(/\.[^.]*$/, ''), mime: r.mime || blob.type, blob, addedAt: r.addedAt || Date.now() });
+      favKeys.add(r.key);
+      syncFavState(r.key, true);
+      count++;
+    } catch { /* skip broken entry */ }
+  }
+  if (!count) { toast('取り込める★がありませんでした'); return; }
+  refreshStars();
+  if (showingFavs) { showingFavs = false; $('favBtn').classList.remove('active'); await toggleFavView(); }
+  toast(count + '件インポートしました');
+}
+$('favExportBtn').addEventListener('click', () => { exportFavorites().catch(() => toast('エクスポートに失敗しました')); });
+$('favImportBtn').addEventListener('click', () => $('favImportFile').click());
+$('favImportFile').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (f) importFavorites(f).catch(() => toast('インポートに失敗しました'));
+});
 $('folderPickBtn').addEventListener('click', () => folderInput.click());
 const fileInput = $('fileInput');
 $('zipPickBtn').addEventListener('click', () => fileInput.click());
