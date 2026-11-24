@@ -553,6 +553,13 @@ function extOf(name) {
   const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
   return m ? m[1] : '';
 }
+// MacのFinder圧縮で付くメタデータ等は画像として扱わない
+// 例: __MACOSX/._foo.jpg (AppleDouble), .DS_Store
+function isJunkEntry(name) {
+  const parts = String(name).replace(/\\/g, '/').split('/');
+  const base = parts[parts.length - 1];
+  return parts.includes('__MACOSX') || base.startsWith('._') || base === '.DS_Store';
+}
 
 /* ---------- 取り出し（展開） ---------- */
 const inflight = new Map(); // 同時展開数の制限
@@ -786,7 +793,7 @@ async function addZipFile(file, relPath) {
     const head = buffer.byteLength >= 4 ? new DataView(buffer).getUint32(0, true) : 0;
     if (head !== 0x04034b50 && !isZipName) throw new Error('ZIPファイルではありません');
     const entries = ZipCore.parseZip(buffer);
-    const images = entries.filter(en => !en.isDir && IMAGE_TYPES[extOf(en.name)]);
+    const images = entries.filter(en => !en.isDir && !isJunkEntry(en.name) && IMAGE_TYPES[extOf(en.name)]);
     if (!images.length) return null;
     const arc = { id: nextArchiveId++, name: file.name, path: relPath || file.name, items: [] };
     for (const entry of images) {
@@ -835,6 +842,7 @@ async function handleFiles(fileList, relPaths) {
   const plain = [];
   for (let i = 0; i < pairs.length; i++) {
     const f = pairs[i].f;
+    if (isJunkEntry(pairs[i].path || f.name)) continue;
     if (/\.zip$|\.cbz$/i.test(f.name) || f.type === 'application/zip') {
       const arc = await addZipFile(f, pairs[i].path);
       if (arc) added.push(arc);
