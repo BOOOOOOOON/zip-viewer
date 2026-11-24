@@ -39,6 +39,7 @@
   header p { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .spacer { flex: 1; }
   .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sizelabel { font-size: 12px; color: var(--muted); margin-left: 6px; }
   .controls input[type="search"] {
     background: var(--panel2); border: 1px solid var(--border2); color: var(--text);
     border-radius: 8px; padding: 6px 10px; font-size: 12px; width: 170px; outline: none;
@@ -237,13 +238,14 @@
 
 <header>
   <div class="controls">
-    <button class="btn" id="folderBtn" title="📁">📁</button>
-    <button class="btn" id="favBtn" title="★">★</button>
-    <button class="btn" id="favExportBtn" title="📤">📤</button>
-    <button class="btn" id="favImportBtn" title="📥">📥</button>
+    <button class="btn" id="folderBtn" title="フォルダを開く">📁 フォルダ</button>
+    <button class="btn" id="favBtn" title="お気に入り">★ お気に入り</button>
+    <button class="btn" id="favExportBtn" title="お気に入りを書き出し">📤 書き出し</button>
+    <button class="btn" id="favImportBtn" title="お気に入りを読み込み">📥 読み込み</button>
     <input type="file" id="favImportFile" accept=".json,application/json" style="display:none">
-    <input type="range" id="sizeRange" min="110" max="320" value="180" title="🔍">
-    <button class="btn" id="clearBtn" title="✕" disabled>✕</button>
+    <span class="sizelabel">サイズ</span>
+    <input type="range" id="sizeRange" min="110" max="320" value="180" title="サムネイルの大きさ">
+    <button class="btn" id="clearBtn" title="全部閉じる" disabled>✕ 全部閉じる</button>
   </div>
 </header>
 
